@@ -1,5 +1,10 @@
 module BackwordsDiffLibrary
 
-# Write your package code here.
+include("dataTyp.jl")
+include("overloadMethods.jl")
+include("gradient.jl")
+
+export ReverseNode, lift
+export grad
 
 end
