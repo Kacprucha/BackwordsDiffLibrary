@@ -33,7 +33,7 @@ Define your function using ```ReverseNode``` structure to define parameters and 
 # Example function: f(x) = 2x + cos(xy + 0.5x)^2
 function f(x::ReverseNode, y::ReverseNode)
     # We can "lift" constants as ReverseNode too.
-    two = lift(3.0)
+    two = lift(2.0)
     half = lift(0.5)
     return two*x + cos(x*y + half*x)^two
 end
