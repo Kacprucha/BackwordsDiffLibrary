@@ -1,9 +1,9 @@
-struct ReverseNode
-    value::Float64
-    grad::Array{Float64}
+struct ReverseNode{T}
+    value::T
+    grad::Vector{T}
     children::Vector{Tuple{ReverseNode, Function}}
 end
 
-ReverseNode(x::Float64) = ReverseNode(x, [0.0], Tuple{ReverseNode, Function}[])
+ReverseNode(x) = ReverseNode(float(x), [zero(float(x))], Tuple{ReverseNode, Function}[])
 
-lift(x::Float64) = ReverseNode(x)
+lift(x) = ReverseNode(x)

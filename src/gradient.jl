@@ -6,13 +6,15 @@ function backward!(node::ReverseNode)
     end
 end
 
-function grad(f, input_values::Vector{Float64})
+function grad(f, input_values::Vector)
     nodes = [ReverseNode(x) for x in input_values]
-    
+
     output = f(nodes...)
-    output.grad[1] = 1.0
+    output.grad[1] = seed(output.value)
 
     backward!(output)
 
     return [n.grad[1] for n in nodes]
 end
+
+seed(x) = x isa Number ? one(x) : ones(size(x))
