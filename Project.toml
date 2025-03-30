@@ -1,6 +1,6 @@
 name = "BackwordsDiffLibrary"
 uuid = "904dbfbe-6d3e-483a-a8cb-66278886ffc3"
-authors = ["Karaś Kacper <karas.kacper@gmail.com> and contributors"]
+authors = ["Kacper Karaś <karas.kacper@gmail.com> and contributors"]
 version = "1.0.0-DEV"
 
 [deps]
