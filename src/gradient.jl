@@ -1,8 +1,12 @@
 # Backward pass
-function backward!(node::ReverseNode)
-    for (child, local_grad) in node.children
-        child.grad[1] += local_grad(node.grad[1])
-        backward!(child)
+function backward!(root::ReverseNode)
+    stack = [root]
+    while !isempty(stack)
+        node = pop!(stack)
+        @inbounds for (child, local_grad) in node.children
+            child.grad[1] += local_grad(node.grad[1])
+            push!(stack, child)
+        end
     end
 end
 
