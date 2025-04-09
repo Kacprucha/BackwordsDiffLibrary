@@ -6,7 +6,14 @@ struct ReverseNode{T}<: AbstractReverseNode
     children::Vector{Tuple{AbstractReverseNode, Function}}
 end
 
-ReverseNode(x) = ReverseNode(float(x), [zero(float(x))], Tuple{AbstractReverseNode, Function}[])
+ReverseNode(x::Number) = ReverseNode(convert(Float64, x),
+                                     [zero(convert(Float64, x))],
+                                     Tuple{AbstractReverseNode, Function}[])
+
+# Constructor for array values:
+ReverseNode(x::AbstractArray) = ReverseNode(x,
+                                            [zeros(size(x))],
+                                            Tuple{AbstractReverseNode, Function}[])
 
 lift(x) = ReverseNode(x)
 

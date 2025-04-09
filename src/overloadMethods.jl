@@ -1,11 +1,55 @@
 import Base: +, -, *, /, sin, cos, tan, cot, sec, csc, exp, log, ^
 import Statistics: mean
+import Base.:-
+
+# Promote a scalar ReverseNode to an array ReverseNode with the given shape.
+function promote_to_array(a::ReverseNode{Float64}, shp::Tuple)
+    # Create a new node using the array constructor, filling its value to match the desired shape.
+    # We choose to fill with the scalar value from a.
+    return ReverseNode(fill(a.value, shp))
+end
+
+
+-(a::Number, b::AbstractArray) = a .- b
+-(a::AbstractArray, b::Number) = a .- b
++(a::Number, b::AbstractArray) = a .+ b
++(a::AbstractArray, b::Number) = a .+ b
+
+Base.Broadcast.broadcastable(x::ReverseNode) = Ref(x)
 
 # Addition: z = a + b  =>  dz/da = 1, dz/db = 1
 +(a::ReverseNode, b::ReverseNode) = begin
     out = ReverseNode(a.value + b.value)
     push!(out.children, (a, δ -> δ))
     push!(out.children, (b, δ -> δ))
+    out
+end
+
++(a::ReverseNode{Float64}, b::ReverseNode{T}) where {T<:AbstractArray} = begin
+    promoted_a = promote_to_array(a, size(b.value))
+    return promoted_a + b
+end
+
++(a::ReverseNode{T}, b::ReverseNode{Float64}) where {T<:AbstractArray} = begin
+    promoted_b = promote_to_array(b, size(a.value))
+    return a + promoted_b
+end
+
+-(a::ReverseNode) = begin
+    out = ReverseNode(-a.value)
+    push!(out.children, (a, δ -> -δ))
+    return out
+end
+
+-(a::Number, b::ReverseNode{T}) where {T<:AbstractArray} = begin
+    out = ReverseNode(a .- b.value)
+    push!(out.children, (b, δ -> -δ))
+    out
+end
+
+-(a::ReverseNode{T}, b::Number) where {T<:AbstractArray} = begin
+    out = ReverseNode(a.value .- b)
+    push!(out.children, (a, δ -> δ))
     out
 end
 
@@ -17,6 +61,20 @@ end
     out
 end
 
+# When left is scalar and right is array, promote the scalar.
+-(a::ReverseNode{Float64}, b::ReverseNode{T}) where {T<:AbstractArray} = begin
+    promoted_a = promote_to_array(a, size(b.value))
+    # Now use the already defined array subtraction (elementwise)
+    return promoted_a - b
+end
+
+# When left is array and right is scalar, promote the scalar.
+-(a::ReverseNode{T}, b::ReverseNode{Float64}) where {T<:AbstractArray} = begin
+    promoted_b = promote_to_array(b, size(a.value))
+    return a - promoted_b
+end
+
+
 # Multiplication: z = a * b  =>  dz/da = b, dz/db = a
 *(a::ReverseNode{T}, b::ReverseNode{T}) where {T<:Number} = begin
     out = ReverseNode(a.value * b.value)
@@ -26,12 +84,30 @@ end
 end
 
 # Matrix multiplication: z = a * b  =>  dz/da = b', dz/db = a'
-*(a::ReverseNode{T1}, b::ReverseNode{T2}) where {T1<:AbstractArray, T2<:AbstractArray} = begin
-    out = ReverseNode(a.value * b.value)
-    push!(out.children, (a, δ -> (ndims(δ)==1 ? reshape(δ, :, 1) : δ) * transpose(b.value)))
-    push!(out.children, (b, δ -> vec(transpose(a.value) * (ndims(δ)==1 ? reshape(δ, :, 1) : δ))))
-    out
+function *(a::ReverseNode{T1}, b::ReverseNode{T2}) where {T1<:AbstractArray, T2<:AbstractArray}
+    if size(a.value) == size(b.value)
+        # Both operands have the same shape: perform elementwise multiplication.
+        out_val = a.value .* b.value
+        out = ReverseNode(out_val)
+        push!(out.children, (a, δ -> δ .* b.value))
+        push!(out.children, (b, δ -> δ .* a.value))
+        return out
+    else
+        # Otherwise, assume matrix multiplication is desired.
+        out_val = a.value * b.value
+        out = ReverseNode(out_val)
+        if ndims(a.value) == 2 && ndims(b.value) == 1
+            # Matrix multiplication: handle vector cases
+            push!(out.children, (a, δ -> (ndims(δ)==1 ? reshape(δ, :, 1) : δ) * transpose(b.value)))
+            push!(out.children, (b, δ -> vec(transpose(a.value) * (ndims(δ)==1 ? reshape(δ, :, 1) : δ))))
+        else
+            push!(out.children, (a, δ -> δ * b.value))
+            push!(out.children, (b, δ -> δ * a.value))
+        end
+        return out
+    end
 end
+
 
 # Division: z = a / b  =>  dz/da = 1/b, dz/db = -a/(b^2)
 /(a::ReverseNode, b::ReverseNode) = begin
@@ -156,7 +232,6 @@ end
     push!(out.children, (b, δ -> sum(δ .* (out.value .* log.(max.(a.value, eps()))))))
     out
 end
-
 
 # exp: z = exp(a)  =>  dz/da = exp(a)
 exp(a::ReverseNode{T}) where{T<:Number} = begin
