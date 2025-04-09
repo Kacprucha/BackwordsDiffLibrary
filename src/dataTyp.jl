@@ -52,6 +52,6 @@ macro diffunction(ex)
         new_def = Expr(:function, Expr(:call, f, new_args...), body)
         return esc(new_def)
     else
-        error("@revdiff macro must be used with a function definition of the form f(args...) = ...")
+        error("@diffunction macro must be used with a function definition of the form f(args...) = ...")
     end
 end

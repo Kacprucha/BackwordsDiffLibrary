@@ -27,17 +27,14 @@ Import the library in your Julia script:
 using BackwordsDiffLibrary
 ```
 
-Define your function using ```ReverseNode``` structure to define parameters and numberic elements in function. You can use ```lift``` funcion to crate ```ReverseNode``` element form the number. Hear is example of the function:
+Define your function using ```@diffunction``` macro. Hear is example of how to use it:
 
 ```julia
 # Example function: f(x) = 2x + cos(xy + 0.5x)^2
-function f(x::ReverseNode, y::ReverseNode)
-    # We can "lift" constants as ReverseNode too.
-    two = lift(2.0)
-    half = lift(0.5)
-    return two*x + cos(x*y + half*x)^two
-end
+@diffunction f(x) = 2x + cos(xy + 0.5x)^2
 ```
+
+The important part is that the function has to be defined in the form of f(args...) = ...
 
 After defining the function we can use ```grad``` function that takes as first argument function that gradient we want to calculate and as second a point in witch we want to calculate it. The point is stored as a Vector. Hear is an example of using it:
 
