@@ -1,19 +1,17 @@
-import Base: +, -, *, /, sin, cos, tan, cot, sec, csc, exp, log, ^
+import Base: +, -, *, /, sin, cos, tan, cot, sec, csc, exp, log, ^, max
 import Statistics: mean
 import Base.:-
+import Base.:*
 
 # Promote a scalar ReverseNode to an array ReverseNode with the given shape.
 function promote_to_array(a::ReverseNode{Float64}, shp::Tuple)
-    # Create a new node using the array constructor, filling its value to match the desired shape.
-    # We choose to fill with the scalar value from a.
     return ReverseNode(fill(a.value, shp))
 end
 
-
--(a::Number, b::AbstractArray) = a .- b
--(a::AbstractArray, b::Number) = a .- b
-+(a::Number, b::AbstractArray) = a .+ b
-+(a::AbstractArray, b::Number) = a .+ b
+-(a::Number, b::Array) = a .- b
+-(a::Array, b::Number) = a .- b
++(a::Number, b::Array) = a .+ b
++(a::Array, b::Number) = a .+ b
 
 Base.Broadcast.broadcastable(x::ReverseNode) = Ref(x)
 
@@ -25,32 +23,45 @@ Base.Broadcast.broadcastable(x::ReverseNode) = Ref(x)
     out
 end
 
-+(a::ReverseNode{Float64}, b::ReverseNode{T}) where {T<:AbstractArray} = begin
++(a::ReverseNode{Float64}, b::ReverseNode{T}) where {T<:Array} = begin
     promoted_a = promote_to_array(a, size(b.value))
     return promoted_a + b
 end
 
-+(a::ReverseNode{T}, b::ReverseNode{Float64}) where {T<:AbstractArray} = begin
++(a::ReverseNode{T}, b::ReverseNode{Float64}) where {T<:Array} = begin
     promoted_b = promote_to_array(b, size(a.value))
     return a + promoted_b
 end
 
--(a::ReverseNode) = begin
-    out = ReverseNode(-a.value)
-    push!(out.children, (a, δ -> -δ))
++(a::ReverseNode{T1}, b::ReverseNode{T2}) where {T1<:Array, T2<:Array} = begin
+    out = ReverseNode(a.value .+ b.value)
+    push!(out.children, (a, δ -> δ))
+    push!(out.children, (b, δ -> δ))
     return out
 end
 
--(a::Number, b::ReverseNode{T}) where {T<:AbstractArray} = begin
-    out = ReverseNode(a .- b.value)
-    push!(out.children, (b, δ -> -δ))
-    out
++(a::ReverseNode{T}, b::Number) where {T<:Array} = begin
+    out = ReverseNode(a.value .+ b)
+    push!(out.children, (a, δ -> δ))
+    return out
 end
 
--(a::ReverseNode{T}, b::Number) where {T<:AbstractArray} = begin
-    out = ReverseNode(a.value .- b)
++(a::Number, b::ReverseNode{T}) where {T<:Array} = begin
+    out = ReverseNode(a .+ b.value)
+    push!(out.children, (b, δ -> δ))
+    return out
+end
+
++(a::Array, b::ReverseNode{T}) where {T<:Array} = begin
+    out = ReverseNode(a .+ b.value)
+    push!(out.children, (b, δ -> δ))
+    return out
+end
+
++(a::ReverseNode{T}, b::Array) where {T<:Array} = begin
+    out = ReverseNode(a.value .+ b)
     push!(out.children, (a, δ -> δ))
-    out
+    return out
 end
 
 # Subtraction: z = a - b  =>  dz/da = 1, dz/db = -1
@@ -62,18 +73,46 @@ end
 end
 
 # When left is scalar and right is array, promote the scalar.
--(a::ReverseNode{Float64}, b::ReverseNode{T}) where {T<:AbstractArray} = begin
+-(a::ReverseNode{Float64}, b::ReverseNode{T}) where {T<:Array} = begin
     promoted_a = promote_to_array(a, size(b.value))
-    # Now use the already defined array subtraction (elementwise)
     return promoted_a - b
 end
 
 # When left is array and right is scalar, promote the scalar.
--(a::ReverseNode{T}, b::ReverseNode{Float64}) where {T<:AbstractArray} = begin
+-(a::ReverseNode{T}, b::ReverseNode{Float64}) where {T<:Array} = begin
     promoted_b = promote_to_array(b, size(a.value))
     return a - promoted_b
 end
 
+-(a::ReverseNode) = begin
+    out = ReverseNode(-a.value)
+    push!(out.children, (a, δ -> -δ))
+    return out
+end
+
+-(a::Number, b::ReverseNode{T}) where {T<:Array} = begin
+    out = ReverseNode(a .- b.value)
+    push!(out.children, (b, δ -> -δ))
+    return out
+end
+
+-(a::ReverseNode{T}, b::Number) where {T<:Array} = begin
+    out = ReverseNode(a.value .- b)
+    push!(out.children, (a, δ -> δ))
+    return out
+end
+
+-(a::Array, b::ReverseNode{T}) where {T<:Array} = begin
+    out = ReverseNode(a .- b.value)
+    push!(out.children, (b, δ -> -δ))
+    return out
+end
+
+-(a::ReverseNode{T}, b::Array) where {T<:Array} = begin
+    out = ReverseNode(a.value .- b)
+    push!(out.children, (a, δ -> δ))
+    return out
+end
 
 # Multiplication: z = a * b  =>  dz/da = b, dz/db = a
 *(a::ReverseNode{T}, b::ReverseNode{T}) where {T<:Number} = begin
@@ -84,7 +123,7 @@ end
 end
 
 # Matrix multiplication: z = a * b  =>  dz/da = b', dz/db = a'
-function *(a::ReverseNode{T1}, b::ReverseNode{T2}) where {T1<:AbstractArray, T2<:AbstractArray}
+*(a::ReverseNode{T1}, b::ReverseNode{T2}) where {T1<:Array, T2<:Array} = begin
     if size(a.value) == size(b.value)
         # Both operands have the same shape: perform elementwise multiplication.
         out_val = a.value .* b.value
@@ -108,6 +147,42 @@ function *(a::ReverseNode{T1}, b::ReverseNode{T2}) where {T1<:AbstractArray, T2<
     end
 end
 
+*(a::ReverseNode{T}, b::Number) where {T<:Array} = begin
+    out = ReverseNode(a.value .* b)
+    push!(out.children, (a, δ -> δ .* b))
+    return out
+end
+
+*(a::Number, b::ReverseNode{T}) where {T<:Array} = begin
+    out = ReverseNode(a .* b.value)
+    push!(out.children, (b, δ -> δ .* a))
+    return out
+end
+
+*(a::Array, b::ReverseNode{T}) where {T<:Array} = begin
+    out = ReverseNode(a * b.value)
+    push!(out.children, (b, δ -> δ * a'))
+    return out
+end
+
+*(a::ReverseNode{T}, b::Array) where {T<:Array} = begin
+    out = ReverseNode(a.value * b)  
+    push!(out.children, (a, δ -> δ * b'))
+    return out
+end
+
+# .*(a::ReverseNode{T}, b::Array) where {T<:Array} = begin
+#     out = ReverseNode(a.value .* b) 
+#     push!(out.children, (a, δ -> δ .* b))
+#     return out
+# end
+
+# .*(a::Array, b::ReverseNode{T}) where {T<:Array} = begin
+#     out = ReverseNode(a .* b.value)
+#     push!(out.children, (b, δ -> a .* δ))
+#     return out
+# end
+
 
 # Division: z = a / b  =>  dz/da = 1/b, dz/db = -a/(b^2)
 /(a::ReverseNode, b::ReverseNode) = begin
@@ -117,6 +192,18 @@ end
     out
 end
 
+/(a::ReverseNode{T}, b::Number) where {T<:Array} = begin
+    out = ReverseNode(a.value ./ b)
+    push!(out.children, (a, δ -> δ ./ b))
+    return out
+end 
+
+/(a::Number, b::ReverseNode{T}) where {T<:Array} = begin
+    out = ReverseNode(a ./ b.value)
+    push!(out.children, (b, δ -> δ .* (-a ./ (b.value.^2))))
+    return out
+end
+
 # sin: z = sin(a)  =>  dz/da = cos(a)
 sin(a::ReverseNode{T}) where {T<:Number} = begin
     out = ReverseNode(sin(a.value))
@@ -124,7 +211,7 @@ sin(a::ReverseNode{T}) where {T<:Number} = begin
     out
 end
 
-sin(a::ReverseNode{T}) where {T<:AbstractArray} = begin
+sin(a::ReverseNode{T}) where {T<:Array} = begin
     out = ReverseNode(sin.(a.value))
     push!(out.children, (a, δ -> δ .* cos.(a.value)))
     out
@@ -137,7 +224,7 @@ cos(a::ReverseNode{T}) where {T<:Number} = begin
     out
 end
 
-cos(a::ReverseNode{T}) where {T<:AbstractArray} = begin
+cos(a::ReverseNode{T}) where {T<:Array} = begin
     out = ReverseNode(cos.(a.value))
     push!(out.children, (a, δ -> δ .* -sin.(a.value)))
     out
@@ -151,7 +238,7 @@ tan(a::ReverseNode{T}) where {T<:Number} = begin
     out
 end
 
-tan(a::ReverseNode{T}) where {T<:AbstractArray} = begin
+tan(a::ReverseNode{T}) where {T<:Array} = begin
     out = ReverseNode(tan.(a.value))
     push!(out.children, (a, δ -> δ .* sec.(a.value).^2))
     out
@@ -164,7 +251,7 @@ cot(a::ReverseNode{T}) where{T<:Number} = begin
     out
 end
 
-cot(a::ReverseNode{T}) where{T<:AbstractArray} = begin
+cot(a::ReverseNode{T}) where{T<:Array} = begin
     out = ReverseNode(cot.(a.value))
     push!(out.children, (a, δ -> δ .* -csc.(a.value).^2))
     out
@@ -177,7 +264,7 @@ sec(a::ReverseNode{T}) where{T<:Number} = begin
     out
 end
 
-sec(a::ReverseNode{T}) where{T<:AbstractArray} = begin
+sec(a::ReverseNode{T}) where{T<:Array} = begin
     out = ReverseNode(sec.(a.value))
     push!(out.children, (a, δ -> δ .* sec.(a.value)tan.(a.value)))
     out
@@ -190,7 +277,7 @@ csc(a::ReverseNode{T}) where {T<:Number} = begin
     out
 end
 
-csc(a::ReverseNode{T}) where {T<:AbstractArray} = begin
+csc(a::ReverseNode{T}) where {T<:Array} = begin
     out = ReverseNode(csc.(a.value))
     push!(out.children, (a, δ -> δ .* -csc.(a.value)cot.(a.value)))
     out
@@ -203,7 +290,7 @@ log(a::ReverseNode{T}) where {T<:Number} = begin
     out
 end
 
-log(a::ReverseNode{T}) where {T<:AbstractArray} = begin
+log(a::ReverseNode{T}) where {T<:Array} = begin
     out = ReverseNode(log.(a.value))
     push!(out.children, (a, δ -> δ ./ a.value))
     out
@@ -217,7 +304,7 @@ end
     out
 end
 
-^(a::ReverseNode{T1}, b::ReverseNode{T2}) where {T1<:AbstractArray, T2<:AbstractArray} = begin
+^(a::ReverseNode{T1}, b::ReverseNode{T2}) where {T1<:Array, T2<:Array} = begin
     out = ReverseNode(a.value .^ b.value)
     push!(out.children, (a, δ -> δ .* b.value .* a.value.^(b.value - 1)))
     push!(out.children, (b, δ -> δ .* out.value .* log.(a.value)))
@@ -240,7 +327,7 @@ exp(a::ReverseNode{T}) where{T<:Number} = begin
     out
 end
 
-exp(a::ReverseNode{T}) where{T<:AbstractArray} = begin
+exp(a::ReverseNode{T}) where{T<:Array} = begin
     out = ReverseNode(exp.(a.value))
     push!(out.children, (a, δ -> δ .* exp.(a.value)))
     out
@@ -252,4 +339,22 @@ mean(a::ReverseNode) = begin
     n = length(a.value)
     push!(out.children, (a, δ -> fill(δ / n, size(a.value))))
     out
+end
+
+max(a::Array, b::ReverseNode{T}) where {T<:Array} = begin
+    out = ReverseNode(max.(a, b.value))
+    push!(out.children, (b, δ -> δ .* (a .> b.value)))
+    return out
+end
+
+max(a::Number, b::ReverseNode{T}) where {T<:Array} = begin
+    out = ReverseNode(max.(a, b.value))
+    push!(out.children, (b, δ -> δ .* (a .> b.value)))
+    return out
+end
+
+max(a::ReverseNode{T}, b::Number) where {T<:Array} = begin
+    out = ReverseNode(max.(a.value, b))
+    push!(out.children, (a, δ -> δ .* (a.value .> b)))
+    return out
 end

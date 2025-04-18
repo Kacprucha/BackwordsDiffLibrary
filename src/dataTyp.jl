@@ -1,19 +1,17 @@
-abstract type AbstractReverseNode end
-
-struct ReverseNode{T}<: AbstractReverseNode
+struct ReverseNode{T}
     value::T
     grad::Vector{T}
-    children::Vector{Tuple{AbstractReverseNode, Function}}
+    children::Vector{Tuple{ReverseNode, Function}}
 end
 
-ReverseNode(x::Number) = ReverseNode(convert(Float64, x),
-                                     [zero(convert(Float64, x))],
-                                     Tuple{AbstractReverseNode, Function}[])
+ReverseNode(x::Number) = ReverseNode(x,
+                                     [zero(x)],
+                                     Tuple{ReverseNode, Function}[])
 
 # Constructor for array values:
-ReverseNode(x::AbstractArray) = ReverseNode(x,
-                                            [zeros(size(x))],
-                                            Tuple{AbstractReverseNode, Function}[])
+ReverseNode(x::Array) = ReverseNode(x,
+                                    [zeros(eltype(x), size(x))],
+                                    Tuple{ReverseNode, Function}[])
 
 lift(x) = ReverseNode(x)
 
