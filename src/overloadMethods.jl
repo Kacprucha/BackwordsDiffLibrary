@@ -64,6 +64,18 @@ end
     return out
 end
 
++(a::ReverseNode{T}, b::Number) where {T<:Number} = begin
+    out = ReverseNode(a.value + b)
+    push!(out.children, (a, δ -> δ))
+    return out
+end
+
++(a::Number, b::ReverseNode{T}) where {T<:Number} = begin
+    out = ReverseNode(a + b.value)
+    push!(out.children, (b, δ -> δ))
+    return out
+end
+
 # Subtraction: z = a - b  =>  dz/da = 1, dz/db = -1
 -(a::ReverseNode, b::ReverseNode) = begin
     out = ReverseNode(a.value - b.value)
@@ -171,18 +183,6 @@ end
     return out
 end
 
-# .*(a::ReverseNode{T}, b::Array) where {T<:Array} = begin
-#     out = ReverseNode(a.value .* b) 
-#     push!(out.children, (a, δ -> δ .* b))
-#     return out
-# end
-
-# .*(a::Array, b::ReverseNode{T}) where {T<:Array} = begin
-#     out = ReverseNode(a .* b.value)
-#     push!(out.children, (b, δ -> a .* δ))
-#     return out
-# end
-
 
 # Division: z = a / b  =>  dz/da = 1/b, dz/db = -a/(b^2)
 /(a::ReverseNode, b::ReverseNode) = begin
@@ -201,6 +201,18 @@ end
 /(a::Number, b::ReverseNode{T}) where {T<:Array} = begin
     out = ReverseNode(a ./ b.value)
     push!(out.children, (b, δ -> δ .* (-a ./ (b.value.^2))))
+    return out
+end
+
+/(a::Number, b::ReverseNode{T}) where {T<:Number} = begin
+    out = ReverseNode(a / b.value)
+    push!(out.children, (b, δ -> δ * (-a / (b.value^2))))
+    return out
+end
+
+/(a::ReverseNode{T}, b::Number) where {T<:Number} = begin
+    out = ReverseNode(a.value / b)
+    push!(out.children, (a, δ -> δ * (1 / b)))
     return out
 end
 
@@ -357,4 +369,40 @@ max(a::ReverseNode{T}, b::Number) where {T<:Array} = begin
     out = ReverseNode(max.(a.value, b))
     push!(out.children, (a, δ -> δ .* (a.value .> b)))
     return out
+end
+
+max(a::ReverseNode{T}, b::Number) where {T<:Number} = begin
+    out = ReverseNode(max(a.value, b))
+    push!(out.children, (a, δ -> δ .* (a.value .> b)))
+    return out
+end
+
+max(a::Number, b::ReverseNode{T}) where {T<:Number} = begin
+    out = ReverseNode(max(a, b.value))
+    push!(out.children, (b, δ -> δ .* (a .> b.value)))
+    return out
+end
+
+ReLU(x::ReverseNode{T}) where {T<:Number} = begin
+    out = ReverseNode(max(0, x.value))
+    push!(out.children, (x, δ -> δ * (x.value .> 0)))
+    out
+end
+
+ReLU(x::ReverseNode{T}) where {T<:Array} = begin
+    out = ReverseNode(max.(0, x.value))
+    push!(out.children, (x, δ -> δ .* (x.value .> 0)))
+    out
+end
+
+Sigmoid(x::ReverseNode{T}) where {T<:Number} = begin
+    out = ReverseNode(1 / (1 + exp(-x.value)))
+    push!(out.children, (x, δ -> δ * out.value * (1 - out.value)))
+    out
+end
+
+Sigmoid(x::ReverseNode{T}) where {T<:Array} = begin
+    out = ReverseNode(1 ./ (1 .+ exp.(-x.value)))
+    push!(out.children, (x, δ -> δ .* out.value .* (1 .- out.value)))
+    out
 end
