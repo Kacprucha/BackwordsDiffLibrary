@@ -46,7 +46,7 @@ computed_gradient = grad(f, input_vals)
 
 ## Examples
 
-You can see examples of uing this function in notebooks in examples folder.
+In folder examples are 3 separate notebooks with difrent cases showing that library calculate gradient correctly. Aditionaly there is simple mlp network implementation that use this library, so you can see how the library can be used in pratice.
 
 ## License
 
